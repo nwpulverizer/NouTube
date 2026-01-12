@@ -119,12 +119,10 @@ function setupPlaybackSpeedMenuObserver() {
 
 function injectCustomPlaybackSpeeds() {
   try {
-    // Try multiple selectors for different YouTube layouts
+    // Look specifically for the playback rate panel, not just any menu
+    // Use more specific selectors that only match playback speed menus
     const selectors = [
-      'ytm-playback-rate-option-list',
-      'ytm-bottom-sheet-renderer',
-      '.ytp-panel-menu',
-      '.ytp-settings-menu',
+      'ytm-playback-rate-option-list',  // Mobile YouTube playback rate list
     ]
     
     let speedPanel: Element | null = null
@@ -167,6 +165,23 @@ function injectCustomPlaybackSpeeds() {
     
     if (!existingOptions || existingOptions.length === 0) {
       log('No existing speed options found')
+      return
+    }
+    
+    // Validate that this is actually the playback rate menu by checking option content
+    // Playback rate options should contain numeric values like "0.25", "0.5", "1", "1.25", etc.
+    let isPlaybackRateMenu = false
+    for (const option of Array.from(existingOptions)) {
+      const text = option.textContent?.trim()
+      // Check if text is a number (with or without 'x' suffix)
+      if (text && /^(\d+(\.\d+)?)(x)?$/i.test(text)) {
+        isPlaybackRateMenu = true
+        break
+      }
+    }
+    
+    if (!isPlaybackRateMenu) {
+      log('Not a playback rate menu, skipping injection')
       return
     }
     
