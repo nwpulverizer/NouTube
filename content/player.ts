@@ -115,127 +115,149 @@ function setupPlaybackSpeedMenuObserver() {
 }
 
 function injectCustomPlaybackSpeeds() {
-  // Try multiple selectors for different YouTube layouts
-  const selectors = [
-    'ytm-playback-rate-option-list',
-    'ytm-bottom-sheet-renderer',
-    '.ytp-panel-menu',
-    '.ytp-settings-menu',
-  ]
-  
-  let speedPanel: Element | null = null
-  for (const selector of selectors) {
-    speedPanel = document.querySelector(selector)
-    if (speedPanel) {
-      break
-    }
-  }
-  
-  if (!speedPanel) {
-    return
-  }
-  
-  // Check if we already injected custom speeds
-  if (speedPanel.querySelector('.nou-custom-speed')) {
-    return
-  }
-  
-  // Try multiple selectors for speed options
-  const optionSelectors = [
-    'ytm-playback-rate-item',
-    '.ytp-menuitem',
-    '[role="menuitemradio"]',
-  ]
-  
-  let existingOptions: NodeListOf<Element> | null = null
-  for (const selector of optionSelectors) {
-    existingOptions = speedPanel.querySelectorAll(selector)
-    if (existingOptions.length > 0) {
-      break
-    }
-  }
-  
-  if (!existingOptions || existingOptions.length === 0) {
-    return
-  }
-  
-  // Get the last option as a template
-  const templateOption = existingOptions[existingOptions.length - 1]
-  if (!templateOption) {
-    return
-  }
-  
-  // Custom speeds to add (above 2x)
-  const customSpeeds = [2.5, 3, 3.5, 4]
-  
-  // Create and inject custom speed options
-  customSpeeds.forEach((speed) => {
-    const customOption = templateOption.cloneNode(true) as HTMLElement
-    customOption.classList.add('nou-custom-speed')
+  try {
+    // Try multiple selectors for different YouTube layouts
+    const selectors = [
+      'ytm-playback-rate-option-list',
+      'ytm-bottom-sheet-renderer',
+      '.ytp-panel-menu',
+      '.ytp-settings-menu',
+    ]
     
-    // Update the speed value display - try multiple selectors
-    const labelSelectors = ['.rate-label', '[class*="label"]', '.ytp-menuitem-label', 'span', 'div']
-    let labelUpdated = false
-    
-    for (const selector of labelSelectors) {
-      const label = customOption.querySelector(selector)
-      if (label && label.textContent) {
-        label.textContent = `${speed}`
-        labelUpdated = true
+    let speedPanel: Element | null = null
+    let foundSelector = ''
+    for (const selector of selectors) {
+      speedPanel = document.querySelector(selector)
+      if (speedPanel) {
+        foundSelector = selector
         break
       }
     }
     
-    // If no label found, try to update the entire element's text
-    if (!labelUpdated && customOption.textContent) {
-      customOption.textContent = `${speed}`
+    if (!speedPanel) {
+      return
     }
     
-    // Update any data attributes
-    customOption.setAttribute('data-rate', speed.toString())
+    // Check if we already injected custom speeds
+    if (speedPanel.querySelector('.nou-custom-speed')) {
+      return
+    }
     
-    // Add click handler
-    customOption.addEventListener('click', (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      
-      if (player) {
-        player.setPlaybackRate(speed)
-        
-        // Update UI to show selected state
-        existingOptions?.forEach((opt) => {
-          opt.removeAttribute('checked')
-          opt.removeAttribute('aria-checked')
-          opt.classList.remove('ytp-menuitem-selected')
-        })
-        customOption.setAttribute('checked', '')
-        customOption.setAttribute('aria-checked', 'true')
-        customOption.classList.add('ytp-menuitem-selected')
-        
-        // Try to close the settings menu
-        const closeSelectors = [
-          'ytm-bottom-sheet-renderer .close-button',
-          'button[aria-label*="lose"]',
-          '.ytp-panel-back-button',
-        ]
-        
-        for (const selector of closeSelectors) {
-          const closeButton = document.querySelector(selector)
-          if (closeButton instanceof HTMLElement) {
-            closeButton.click()
-            break
-          }
-        }
-        
-        log(`Playback speed set to ${speed}x`)
+    log(`Found speed panel with selector: ${foundSelector}`)
+    
+    // Try multiple selectors for speed options
+    const optionSelectors = [
+      'ytm-playback-rate-item',
+      '.ytp-menuitem',
+      '[role="menuitemradio"]',
+    ]
+    
+    let existingOptions: NodeListOf<Element> | null = null
+    let foundOptionSelector = ''
+    for (const selector of optionSelectors) {
+      existingOptions = speedPanel.querySelectorAll(selector)
+      if (existingOptions.length > 0) {
+        foundOptionSelector = selector
+        break
       }
+    }
+    
+    if (!existingOptions || existingOptions.length === 0) {
+      log('No existing speed options found')
+      return
+    }
+    
+    log(`Found ${existingOptions.length} existing options with selector: ${foundOptionSelector}`)
+    
+    // Get the last option as a template
+    const templateOption = existingOptions[existingOptions.length - 1]
+    if (!templateOption) {
+      log('Template option is null')
+      return
+    }
+    
+    // Custom speeds to add (above 2x)
+    const customSpeeds = [2.5, 3, 3.5, 4]
+    
+    // Create and inject custom speed options
+    customSpeeds.forEach((speed) => {
+      const customOption = templateOption.cloneNode(true) as HTMLElement
+      customOption.classList.add('nou-custom-speed')
+      
+      // Update the speed value display - try multiple selectors
+      const labelSelectors = ['.rate-label', '[class*="label"]', '.ytp-menuitem-label', 'span', 'div']
+      let labelUpdated = false
+      
+      for (const selector of labelSelectors) {
+        const label = customOption.querySelector(selector)
+        if (label && label.textContent) {
+          label.textContent = `${speed}`
+          labelUpdated = true
+          break
+        }
+      }
+      
+      // If no label found, try to update the entire element's text
+      if (!labelUpdated && customOption.textContent) {
+        customOption.textContent = `${speed}`
+      }
+      
+      // Update any data attributes
+      customOption.setAttribute('data-rate', speed.toString())
+      
+      // Add click handler
+      customOption.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        
+        if (player) {
+          player.setPlaybackRate(speed)
+          
+          // Update UI to show selected state
+          existingOptions?.forEach((opt) => {
+            opt.removeAttribute('checked')
+            opt.removeAttribute('aria-checked')
+            opt.classList.remove('ytp-menuitem-selected')
+          })
+          
+          // Also update custom options
+          speedPanel?.querySelectorAll('.nou-custom-speed').forEach((opt) => {
+            opt.removeAttribute('checked')
+            opt.removeAttribute('aria-checked')
+            opt.classList.remove('ytp-menuitem-selected')
+          })
+          
+          customOption.setAttribute('checked', '')
+          customOption.setAttribute('aria-checked', 'true')
+          customOption.classList.add('ytp-menuitem-selected')
+          
+          // Try to close the settings menu
+          const closeSelectors = [
+            'ytm-bottom-sheet-renderer .close-button',
+            'button[aria-label*="lose"]',
+            '.ytp-panel-back-button',
+          ]
+          
+          for (const selector of closeSelectors) {
+            const closeButton = document.querySelector(selector)
+            if (closeButton instanceof HTMLElement) {
+              closeButton.click()
+              break
+            }
+          }
+          
+          log(`Playback speed set to ${speed}x`)
+        }
+      })
+      
+      // Insert the custom option after existing options
+      templateOption.parentNode?.appendChild(customOption)
     })
     
-    // Insert the custom option after existing options
-    templateOption.parentNode?.appendChild(customOption)
-  })
-  
-  log('Injected custom playback speeds into menu')
+    log(`Injected ${customSpeeds.length} custom playback speeds into menu`)
+  } catch (e) {
+    log('Error injecting custom playback speeds:', e)
+  }
 }
 
 export function handleVideoPlayer(el: any) {
