@@ -97,6 +97,9 @@ function setupPlaybackSpeedMenuObserver() {
     settingsMenuObserver.disconnect()
   }
   
+  // Observe a more specific container if possible, otherwise fall back to body
+  const observeTarget = document.getElementById('movie_player') || document.body
+  
   // Create observer to watch for settings menu
   settingsMenuObserver = new MutationObserver((mutations) => {
     // Only check when there are actual DOM changes
@@ -107,8 +110,8 @@ function setupPlaybackSpeedMenuObserver() {
     }
   })
   
-  // Observe the entire document for settings menu appearing
-  settingsMenuObserver.observe(document.body, {
+  // Observe the player container or body for settings menu appearing
+  settingsMenuObserver.observe(observeTarget, {
     childList: true,
     subtree: true,
   })
@@ -210,44 +213,48 @@ function injectCustomPlaybackSpeeds() {
         e.preventDefault()
         e.stopPropagation()
         
-        if (player) {
-          player.setPlaybackRate(speed)
-          
-          // Update UI to show selected state
-          existingOptions?.forEach((opt) => {
-            opt.removeAttribute('checked')
-            opt.removeAttribute('aria-checked')
-            opt.classList.remove('ytp-menuitem-selected')
-          })
-          
-          // Also update custom options
-          speedPanel?.querySelectorAll('.nou-custom-speed').forEach((opt) => {
-            opt.removeAttribute('checked')
-            opt.removeAttribute('aria-checked')
-            opt.classList.remove('ytp-menuitem-selected')
-          })
-          
-          customOption.setAttribute('checked', '')
-          customOption.setAttribute('aria-checked', 'true')
-          customOption.classList.add('ytp-menuitem-selected')
-          
-          // Try to close the settings menu
-          const closeSelectors = [
-            'ytm-bottom-sheet-renderer .close-button',
-            'button[aria-label*="lose"]',
-            '.ytp-panel-back-button',
-          ]
-          
-          for (const selector of closeSelectors) {
-            const closeButton = document.querySelector(selector)
-            if (closeButton instanceof HTMLElement) {
-              closeButton.click()
-              break
-            }
-          }
-          
-          log(`Playback speed set to ${speed}x`)
+        if (!player) {
+          log('Player not available for playback rate change')
+          return
         }
+        
+        player.setPlaybackRate(speed)
+        
+        // Update UI to show selected state - clear all selections first
+        existingOptions?.forEach((opt) => {
+          opt.removeAttribute('checked')
+          opt.removeAttribute('aria-checked')
+          opt.classList.remove('ytp-menuitem-selected')
+        })
+        
+        // Also update custom options
+        speedPanel?.querySelectorAll('.nou-custom-speed').forEach((opt) => {
+          opt.removeAttribute('checked')
+          opt.removeAttribute('aria-checked')
+          opt.classList.remove('ytp-menuitem-selected')
+        })
+        
+        // Set this option as selected
+        customOption.setAttribute('checked', '')
+        customOption.setAttribute('aria-checked', 'true')
+        customOption.classList.add('ytp-menuitem-selected')
+        
+        // Try to close the settings menu
+        const closeSelectors = [
+          'ytm-bottom-sheet-renderer .close-button',
+          'button[aria-label*="lose"]',
+          '.ytp-panel-back-button',
+        ]
+        
+        for (const selector of closeSelectors) {
+          const closeButton = document.querySelector(selector)
+          if (closeButton instanceof HTMLElement) {
+            closeButton.click()
+            break
+          }
+        }
+        
+        log(`Playback speed set to ${speed}x`)
       })
       
       // Insert the custom option after existing options
