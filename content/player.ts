@@ -119,8 +119,8 @@ function setupPlaybackSpeedMenuObserver() {
 
 function injectCustomPlaybackSpeeds() {
   try {
-    // Look specifically for the playback rate panel, not just any menu
-    // Use more specific selectors that only match playback speed menus
+    // Look for the playback rate submenu specifically
+    // This submenu appears inside a bottom sheet when user clicks "Playback speed" in settings
     const selectors = [
       'ytm-playback-rate-option-list',  // Mobile YouTube playback rate list
     ]
@@ -136,6 +136,13 @@ function injectCustomPlaybackSpeeds() {
     }
     
     if (!speedPanel) {
+      return
+    }
+    
+    // Check if the speed panel is actually visible/displayed
+    // This helps ensure we're in the playback speed submenu, not just the main menu
+    const rect = speedPanel.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) {
       return
     }
     
@@ -170,18 +177,19 @@ function injectCustomPlaybackSpeeds() {
     
     // Validate that this is actually the playback rate menu by checking option content
     // Playback rate options should contain numeric values like "0.25", "0.5", "1", "1.25", etc.
-    let isPlaybackRateMenu = false
+    // We need at least 3 numeric options to be confident this is the playback speed menu
+    let numericOptionCount = 0
     for (const option of Array.from(existingOptions)) {
       const text = option.textContent?.trim()
       // Check if text is a number (with or without 'x' suffix)
       if (text && /^(\d+(\.\d+)?)(x)?$/i.test(text)) {
-        isPlaybackRateMenu = true
-        break
+        numericOptionCount++
       }
     }
     
-    if (!isPlaybackRateMenu) {
-      log('Not a playback rate menu, skipping injection')
+    // Require at least 3 numeric options (e.g., 0.5, 1, 2) to confirm it's the playback rate menu
+    if (numericOptionCount < 3) {
+      log(`Not enough numeric options (${numericOptionCount}), skipping injection`)
       return
     }
     
