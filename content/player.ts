@@ -147,32 +147,6 @@ function injectCustomPlaybackSpeeds() {
       return
     }
     
-    // Additional check: ensure we're in the playback speed submenu by looking for the parent container
-    // The playback speed submenu should be inside a bottom sheet with specific characteristics
-    const bottomSheet = speedPanel.closest('ytm-bottom-sheet-renderer')
-    if (!bottomSheet) {
-      log('No bottom sheet parent found, skipping injection')
-      return
-    }
-    
-    // Check if the bottom sheet is displaying the playback speed submenu
-    // by verifying it doesn't contain the main settings options
-    const mainSettingsIndicators = bottomSheet.querySelectorAll('[class*="settings"], ytm-menu-item')
-    const hasMainSettingsItems = Array.from(mainSettingsIndicators).some(el => {
-      const text = el.textContent?.toLowerCase()
-      return text && (
-        text.includes('quality') || 
-        text.includes('captions') || 
-        text.includes('annotations') ||
-        text.includes('playback speed') && !text.match(/^\s*\d/)  // "Playback speed" text but not a speed value
-      )
-    })
-    
-    if (hasMainSettingsItems) {
-      log('Detected main settings menu, skipping injection')
-      return
-    }
-    
     // Check if we already injected custom speeds
     if (speedPanel.querySelector('.nou-custom-speed')) {
       return
@@ -180,48 +154,40 @@ function injectCustomPlaybackSpeeds() {
     
     log(`Found speed panel with selector: ${foundSelector}`)
     
-    // Try multiple selectors for speed options
-    const optionSelectors = [
-      'ytm-playback-rate-item',
-      '.ytp-menuitem',
-      '[role="menuitemradio"]',
-    ]
-    
-    let existingOptions: NodeListOf<Element> | null = null
-    let foundOptionSelector = ''
-    for (const selector of optionSelectors) {
-      existingOptions = speedPanel.querySelectorAll(selector)
-      if (existingOptions.length > 0) {
-        foundOptionSelector = selector
-        break
-      }
-    }
+    // Look specifically for playback rate items (ytm-playback-rate-item)
+    const existingOptions = speedPanel.querySelectorAll('ytm-playback-rate-item')
     
     if (!existingOptions || existingOptions.length === 0) {
       log('No existing speed options found')
       return
     }
     
-    // Validate that this is actually the playback rate menu by checking option content
-    // Playback rate options should contain numeric values like "0.25", "0.5", "1", "1.25", etc.
-    // We need at least this many numeric options to be confident this is the playback speed menu
+    // CRITICAL VALIDATION: ALL options must be numeric speed values
+    // If ANY option is not a numeric speed, this is NOT the playback speed submenu
     const MIN_PLAYBACK_OPTIONS = 3
-    let numericOptionCount = 0
+    let allNumeric = true
+    let numericCount = 0
+    
     for (const option of Array.from(existingOptions)) {
       const text = option.textContent?.trim()
-      // Check if text is a number (with or without 'x' suffix)
+      // Speed values should be like "0.25", "0.5", "1", "1.25", "1.5", "1.75", "2" (with or without "x")
       if (text && /^(\d+(\.\d+)?)(x)?$/i.test(text)) {
-        numericOptionCount++
+        numericCount++
+      } else {
+        // Found a non-numeric option - this is NOT the playback speed submenu
+        allNumeric = false
+        log(`Found non-numeric option: "${text}", skipping injection`)
+        break
       }
     }
     
-    // Require at least MIN_PLAYBACK_OPTIONS numeric options to confirm it's the playback rate menu
-    if (numericOptionCount < MIN_PLAYBACK_OPTIONS) {
-      log(`Not enough numeric options (${numericOptionCount}), skipping injection`)
+    // Must have at least MIN_PLAYBACK_OPTIONS numeric options AND all must be numeric
+    if (!allNumeric || numericCount < MIN_PLAYBACK_OPTIONS) {
+      log(`Not the playback speed submenu (allNumeric: ${allNumeric}, count: ${numericCount})`)
       return
     }
     
-    log(`Found ${existingOptions.length} existing options with selector: ${foundOptionSelector}`)
+    log(`Found ${existingOptions.length} playback speed options, all numeric. Proceeding with injection.`)
     
     // Get the last option as a template
     const templateOption = existingOptions[existingOptions.length - 1]
