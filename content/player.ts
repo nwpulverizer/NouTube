@@ -147,6 +147,32 @@ function injectCustomPlaybackSpeeds() {
       return
     }
     
+    // Additional check: ensure we're in the playback speed submenu by looking for the parent container
+    // The playback speed submenu should be inside a bottom sheet with specific characteristics
+    const bottomSheet = speedPanel.closest('ytm-bottom-sheet-renderer')
+    if (!bottomSheet) {
+      log('No bottom sheet parent found, skipping injection')
+      return
+    }
+    
+    // Check if the bottom sheet is displaying the playback speed submenu
+    // by verifying it doesn't contain the main settings options
+    const mainSettingsIndicators = bottomSheet.querySelectorAll('[class*="settings"], ytm-menu-item')
+    const hasMainSettingsItems = Array.from(mainSettingsIndicators).some(el => {
+      const text = el.textContent?.toLowerCase()
+      return text && (
+        text.includes('quality') || 
+        text.includes('captions') || 
+        text.includes('annotations') ||
+        text.includes('playback speed') && !text.match(/^\s*\d/)  // "Playback speed" text but not a speed value
+      )
+    })
+    
+    if (hasMainSettingsItems) {
+      log('Detected main settings menu, skipping injection')
+      return
+    }
+    
     // Check if we already injected custom speeds
     if (speedPanel.querySelector('.nou-custom-speed')) {
       return
