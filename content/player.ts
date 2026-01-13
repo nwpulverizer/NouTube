@@ -142,7 +142,8 @@ function injectCustomPlaybackSpeeds() {
     // Check if the speed panel is actually visible/displayed
     // This helps ensure we're in the playback speed submenu, not just the main menu
     const rect = speedPanel.getBoundingClientRect()
-    if (rect.width === 0 || rect.height === 0) {
+    const computedStyle = getComputedStyle(speedPanel)
+    if (rect.width === 0 || rect.height === 0 || computedStyle.visibility === 'hidden' || computedStyle.opacity === '0') {
       return
     }
     
@@ -177,7 +178,8 @@ function injectCustomPlaybackSpeeds() {
     
     // Validate that this is actually the playback rate menu by checking option content
     // Playback rate options should contain numeric values like "0.25", "0.5", "1", "1.25", etc.
-    // We need at least 3 numeric options to be confident this is the playback speed menu
+    // We need at least this many numeric options to be confident this is the playback speed menu
+    const MIN_PLAYBACK_OPTIONS = 3
     let numericOptionCount = 0
     for (const option of Array.from(existingOptions)) {
       const text = option.textContent?.trim()
@@ -187,8 +189,8 @@ function injectCustomPlaybackSpeeds() {
       }
     }
     
-    // Require at least 3 numeric options (e.g., 0.5, 1, 2) to confirm it's the playback rate menu
-    if (numericOptionCount < 3) {
+    // Require at least MIN_PLAYBACK_OPTIONS numeric options to confirm it's the playback rate menu
+    if (numericOptionCount < MIN_PLAYBACK_OPTIONS) {
       log(`Not enough numeric options (${numericOptionCount}), skipping injection`)
       return
     }
