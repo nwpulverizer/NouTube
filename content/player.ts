@@ -30,6 +30,7 @@ export function handleMutations(mutations: MutationRecord[]) {
 }
 
 let playbackRatesExtended = false
+let settingsMenuObserver: MutationObserver | null = null
 
 function extendPlaybackRates(player: any) {
   if (playbackRatesExtended) {
@@ -82,9 +83,205 @@ function extendPlaybackRates(player: any) {
     if (player.getAvailablePlaybackRates && player.setPlaybackRate) {
       playbackRatesExtended = true
       log('Playback rates extended to 4x')
+      
+      // Set up observer to inject custom playback speed options into the settings menu
+      setupPlaybackSpeedMenuObserver()
     }
   } catch (e) {
     log('Failed to extend playback rates:', e)
+  }
+}
+
+function setupPlaybackSpeedMenuObserver() {
+  // Clean up existing observer if any
+  if (settingsMenuObserver) {
+    settingsMenuObserver.disconnect()
+  }
+  
+  // Observe a more specific container if possible, otherwise fall back to body
+  const observeTarget = document.getElementById('movie_player') || document.body
+  
+  // Create observer to watch for settings menu
+  settingsMenuObserver = new MutationObserver((mutations) => {
+    // Only check when there are actual DOM changes
+    for (const mutation of mutations) {
+      if (mutation.addedNodes.length > 0) {
+        injectCustomPlaybackSpeeds()
+      }
+    }
+  })
+  
+  // Observe the player container or body for settings menu appearing
+  settingsMenuObserver.observe(observeTarget, {
+    childList: true,
+    subtree: true,
+  })
+}
+
+function injectCustomPlaybackSpeeds() {
+  try {
+    // Look for the playback rate submenu specifically
+    // This submenu appears inside a bottom sheet when user clicks "Playback speed" in settings
+    const selectors = [
+      'ytm-playback-rate-option-list',  // Mobile YouTube playback rate list
+    ]
+    
+    let speedPanel: Element | null = null
+    let foundSelector = ''
+    for (const selector of selectors) {
+      speedPanel = document.querySelector(selector)
+      if (speedPanel) {
+        foundSelector = selector
+        break
+      }
+    }
+    
+    if (!speedPanel) {
+      return
+    }
+    
+    // Check if the speed panel is actually visible/displayed
+    // This helps ensure we're in the playback speed submenu, not just the main menu
+    const rect = speedPanel.getBoundingClientRect()
+    const computedStyle = getComputedStyle(speedPanel)
+    if (rect.width === 0 || rect.height === 0 || computedStyle.visibility === 'hidden' || computedStyle.opacity === '0') {
+      return
+    }
+    
+    // Check if we already injected custom speeds
+    if (speedPanel.querySelector('.nou-custom-speed')) {
+      return
+    }
+    
+    log(`Found speed panel with selector: ${foundSelector}`)
+    
+    // Look specifically for playback rate items (ytm-playback-rate-item)
+    const existingOptions = speedPanel.querySelectorAll('ytm-playback-rate-item')
+    
+    if (!existingOptions || existingOptions.length === 0) {
+      log('No existing speed options found')
+      return
+    }
+    
+    // CRITICAL VALIDATION: ALL options must be numeric speed values
+    // If ANY option is not a numeric speed, this is NOT the playback speed submenu
+    const MIN_PLAYBACK_OPTIONS = 3
+    let allNumeric = true
+    let numericCount = 0
+    
+    for (const option of Array.from(existingOptions)) {
+      const text = option.textContent?.trim()
+      // Speed values should be like "0.25", "0.5", "1", "1.25", "1.5", "1.75", "2" (with or without "x")
+      if (text && /^(\d+(\.\d+)?)(x)?$/i.test(text)) {
+        numericCount++
+      } else {
+        // Found a non-numeric option - this is NOT the playback speed submenu
+        allNumeric = false
+        log(`Found non-numeric option: "${text}", skipping injection`)
+        break
+      }
+    }
+    
+    // Must have at least MIN_PLAYBACK_OPTIONS numeric options AND all must be numeric
+    if (!allNumeric || numericCount < MIN_PLAYBACK_OPTIONS) {
+      log(`Not the playback speed submenu (allNumeric: ${allNumeric}, count: ${numericCount})`)
+      return
+    }
+    
+    log(`Found ${existingOptions.length} playback speed options, all numeric. Proceeding with injection.`)
+    
+    // Get the last option as a template
+    const templateOption = existingOptions[existingOptions.length - 1]
+    if (!templateOption) {
+      log('Template option is null')
+      return
+    }
+    
+    // Custom speeds to add (above 2x)
+    const customSpeeds = [2.5, 3, 3.5, 4]
+    
+    // Create and inject custom speed options
+    customSpeeds.forEach((speed) => {
+      const customOption = templateOption.cloneNode(true) as HTMLElement
+      customOption.classList.add('nou-custom-speed')
+      
+      // Update the speed value display - try multiple selectors
+      const labelSelectors = ['.rate-label', '[class*="label"]', '.ytp-menuitem-label', 'span', 'div']
+      let labelUpdated = false
+      
+      for (const selector of labelSelectors) {
+        const label = customOption.querySelector(selector)
+        if (label && label.textContent) {
+          label.textContent = `${speed}`
+          labelUpdated = true
+          break
+        }
+      }
+      
+      // If no label found, try to update the entire element's text
+      if (!labelUpdated && customOption.textContent) {
+        customOption.textContent = `${speed}`
+      }
+      
+      // Update any data attributes
+      customOption.setAttribute('data-rate', speed.toString())
+      
+      // Add click handler
+      customOption.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        
+        if (!player) {
+          log('Player not available for playback rate change')
+          return
+        }
+        
+        player.setPlaybackRate(speed)
+        
+        // Update UI to show selected state - clear all selections first
+        existingOptions?.forEach((opt) => {
+          opt.removeAttribute('checked')
+          opt.removeAttribute('aria-checked')
+          opt.classList.remove('ytp-menuitem-selected')
+        })
+        
+        // Also update custom options
+        speedPanel?.querySelectorAll('.nou-custom-speed').forEach((opt) => {
+          opt.removeAttribute('checked')
+          opt.removeAttribute('aria-checked')
+          opt.classList.remove('ytp-menuitem-selected')
+        })
+        
+        // Set this option as selected
+        customOption.setAttribute('checked', '')
+        customOption.setAttribute('aria-checked', 'true')
+        customOption.classList.add('ytp-menuitem-selected')
+        
+        // Try to close the settings menu
+        const closeSelectors = [
+          'ytm-bottom-sheet-renderer .close-button',
+          'button[aria-label*="lose"]',
+          '.ytp-panel-back-button',
+        ]
+        
+        for (const selector of closeSelectors) {
+          const closeButton = document.querySelector(selector)
+          if (closeButton instanceof HTMLElement) {
+            closeButton.click()
+            break
+          }
+        }
+        
+        log(`Playback speed set to ${speed}x`)
+      })
+      
+      // Insert the custom option after existing options
+      templateOption.parentNode?.appendChild(customOption)
+    })
+    
+    log(`Injected ${customSpeeds.length} custom playback speeds into menu`)
+  } catch (e) {
+    log('Error injecting custom playback speeds:', e)
   }
 }
 
